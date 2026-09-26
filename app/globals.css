@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-size: 16px;
+  }
+
+  body {
+    /* Matches the warm cream of the animation exactly */
+    background-color: #EDE9E1;
+    @apply text-neutral-800 antialiased;
+  }
+}
+
+@layer components {
+  /* Primary CTA — dark charcoal pill, just like the reference */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-neutral-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 disabled:opacity-50;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-neutral-900 px-6 py-3 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-neutral-500 transition hover:text-neutral-900;
+  }
+
+  .input-field {
+    @apply w-full rounded-2xl border border-sand-200 bg-white px-4 py-3 text-base text-neutral-800 placeholder-neutral-400 shadow-sm transition focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-200;
+  }
+
+  .card {
+    @apply rounded-3xl bg-white p-7 shadow-sm;
+  }
+}
