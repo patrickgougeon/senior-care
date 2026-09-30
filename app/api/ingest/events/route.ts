@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateDevice } from "@/lib/device-auth";
+import { notifyFall } from "@/lib/notifications";
 import { EVENT_TYPES, SEVERITIES, DEFAULT_SEVERITY, DEFAULT_MESSAGE, type EventType, type Severity } from "@/lib/events";
 
-// Endpoint chamado pelo serviço externo que processa o sinal Wi-Fi (CSI) entre
-// os dois ESP32 — ele envia aqui o evento já interpretado (ex.: queda detectada),
-// não os dados brutos do dispositivo.
+// Endpoint chamado pela ponte (fall-detection/bridge), que roda no notebook, lê o
+// CSI enviado pelo ESP32 receptor pela USB, detecta a queda e envia aqui o evento
+// já interpretado — não os dados brutos do dispositivo.
 //
 // Autenticação: Authorization: Bearer <apiKey do dispositivo>
 // Corpo esperado (JSON):
@@ -14,6 +15,7 @@ import { EVENT_TYPES, SEVERITIES, DEFAULT_SEVERITY, DEFAULT_MESSAGE, type EventT
 //     "severity": "high" | "medium" | "low",   // opcional, tem padrão por tipo
 //     "message": "texto customizado",           // opcional, tem padrão por tipo
 //     "confidence": 0.93,                       // opcional, 0 a 1
+//     "details": { "peakRatio": 6.1 },          // opcional, objeto JSON com métricas do detector
 //     "batteryLevel": 82,                       // opcional, 0 a 100
 //     "timestamp": "2026-09-26T12:00:00Z"       // opcional, default = agora
 //   }
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
 
-  const { type, severity, message, confidence, batteryLevel, timestamp } = (body ?? {}) as Record<string, unknown>;
+  const { type, severity, message, confidence, batteryLevel, timestamp, details } = (body ?? {}) as Record<string, unknown>;
 
   if (typeof type !== "string" || !EVENT_TYPES.includes(type as EventType)) {
     return NextResponse.json(
@@ -70,6 +72,17 @@ export async function POST(request: Request) {
     batteryValue = batteryLevel;
   }
 
+  let detailsJson: string | null = null;
+  if (details !== undefined && details !== null) {
+    if (typeof details !== "object" || Array.isArray(details)) {
+      return NextResponse.json({ error: 'Campo "details" deve ser um objeto JSON.' }, { status: 400 });
+    }
+    detailsJson = JSON.stringify(details);
+    if (detailsJson.length > 2000) {
+      return NextResponse.json({ error: 'Campo "details" muito grande (máx. 2000 caracteres).' }, { status: 400 });
+    }
+  }
+
   let occurredAt = new Date();
   if (timestamp !== undefined) {
     if (typeof timestamp !== "string") {
@@ -89,6 +102,7 @@ export async function POST(request: Request) {
       severity: resolvedSeverity,
       message: resolvedMessage,
       confidence: confidenceValue,
+      details: detailsJson,
       occurredAt,
     },
   });
@@ -102,8 +116,11 @@ export async function POST(request: Request) {
     },
   });
 
-  // MVP: o alerta fica disponível no dashboard. Notificação automática dos
-  // contatos de emergência (SMS/e-mail) ainda não está implementada.
+  // O alerta aparece no dashboard (que atualiza sozinho). Notificação externa
+  // (Telegram) é opcional e não bloqueia a resposta — ver lib/notifications.ts.
+  if (eventType === "fall_detected") {
+    void notifyFall(device.userId, resolvedMessage);
+  }
 
   return NextResponse.json(
     {
