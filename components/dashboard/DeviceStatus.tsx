@@ -2,14 +2,32 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Wifi, WifiOff, Battery, Copy, Check, Trash2 } from "lucide-react";
+import { Wifi, WifiOff, Battery, Copy, Check, Trash2, FlaskConical } from "lucide-react";
+import type { DeviceDTO } from "@/lib/dashboard-data";
 
-interface DeviceDTO {
-  id: string;
-  name: string;
-  connected: boolean;
-  lastSeenAt: string | null;
-  batteryLevel: number | null;
+const STATE_LABELS: Record<string, { label: string; className: string }> = {
+  calibrating: { label: "Calibrando — mantenha o ambiente parado", className: "bg-amber-100 text-amber-800" },
+  monitoring: { label: "Monitorando", className: "bg-teal-100 text-teal-800" },
+  motion: { label: "Movimento detectado", className: "bg-sky-100 text-sky-800" },
+  evaluating: { label: "Avaliando possível queda…", className: "bg-orange-100 text-orange-800" },
+  alert: { label: "Queda sinalizada", className: "bg-red-100 text-red-800" },
+  no_signal: { label: "Sem sinal do ESP32", className: "bg-gray-200 text-gray-700" },
+};
+
+// Mini-gráfico do índice de atividade do sinal Wi-Fi (histórico só desta sessão do navegador).
+function Sparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const w = 240;
+  const h = 40;
+  const max = Math.max(...values, 0.001);
+  const pts = values
+    .map((v, i) => `${((i / (values.length - 1)) * w).toFixed(1)},${(h - (v / max) * (h - 4) - 2).toFixed(1)}`)
+    .join(" ");
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="mt-3 h-10 w-full" preserveAspectRatio="none" aria-label="Atividade do sinal Wi-Fi">
+      <polyline points={pts} fill="none" stroke="#0d9488" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 function formatLastSeen(iso: string | null) {
@@ -23,13 +41,29 @@ function formatLastSeen(iso: string | null) {
   return `${Math.floor(hours / 24)}d atrás`;
 }
 
-export function DeviceStatus({ device }: { device: DeviceDTO | null }) {
+export function DeviceStatus({
+  device,
+  history = [],
+  onChanged,
+}: {
+  device: DeviceDTO | null;
+  history?: number[];
+  onChanged?: () => void;
+}) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState("");
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  async function handleTest() {
+    setTesting(true);
+    await fetch("/api/events/test", { method: "POST" });
+    setTesting(false);
+    onChanged?.();
+  }
 
   async function handleCreate() {
     setError("");
@@ -55,6 +89,7 @@ export function DeviceStatus({ device }: { device: DeviceDTO | null }) {
     await fetch(`/api/devices/${device.id}`, { method: "DELETE" });
     setRemoving(false);
     router.refresh();
+    onChanged?.();
   }
 
   function handleCopy() {
@@ -67,6 +102,7 @@ export function DeviceStatus({ device }: { device: DeviceDTO | null }) {
   function handleDone() {
     setNewApiKey(null);
     router.refresh();
+    onChanged?.();
   }
 
   // Chave de API gerada — mostrada uma única vez.
@@ -155,8 +191,25 @@ export function DeviceStatus({ device }: { device: DeviceDTO | null }) {
               Bateria: {device.batteryLevel}%
             </p>
           )}
+          {device.rssi !== null && <p className="mt-1 text-sm text-gray-500">Sinal Wi-Fi: {device.rssi} dBm</p>}
         </div>
       </div>
+
+      {device.connected && device.detectorState && STATE_LABELS[device.detectorState] && (
+        <p className={`mt-4 inline-block rounded-full px-3 py-1 text-xs font-semibold ${STATE_LABELS[device.detectorState].className}`}>
+          {STATE_LABELS[device.detectorState].label}
+        </p>
+      )}
+      {device.connected && <Sparkline values={history} />}
+
+      <button
+        onClick={handleTest}
+        disabled={testing}
+        className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 transition hover:text-gray-700"
+      >
+        <FlaskConical className="h-3.5 w-3.5" />
+        {testing ? "Enviando teste…" : "Testar alerta (queda simulada)"}
+      </button>
     </div>
   );
 }

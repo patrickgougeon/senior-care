@@ -50,30 +50,37 @@ model PasswordReset {
 // Um par de módulos ESP32. O serviço externo que processa o sinal Wi-Fi (CSI)
 // autentica nesta API com a apiKeyHash — ver lib/device-auth.ts.
 model Device {
-  id           String    @id @default(cuid())
-  name         String    @default("Dispositivo SeniorCare")
-  apiKeyHash   String
-  connected    Boolean   @default(false)
-  lastSeenAt   DateTime?
-  batteryLevel Int?
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events       Event[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  name          String    @default("Dispositivo SeniorCare")
+  apiKeyHash    String
+  connected     Boolean   @default(false)
+  lastSeenAt    DateTime?
+  batteryLevel  Int?
+  // Telemetria do último heartbeat enviado pela ponte (ver /api/ingest/heartbeat).
+  detectorState String?
+  activityLevel Float?
+  rssi          Int?
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events        Event[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 // Evento já processado (ex.: queda detectada) recebido via HTTP do serviço
 // que analisa o sinal Wi-Fi entre os dois ESP32 — ver app/api/ingest/events.
 model Event {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   type       String // "fall_detected" | "normal" | "low_battery" | "device_offline"
   severity   String // "high" | "medium" | "low"
   message    String
   confidence Float?
-  resolved   Boolean  @default(false)
-  occurredAt DateTime @default(now())
+  resolved   Boolean   @default(false)
+  resolvedAt DateTime?
+  // JSON com métricas do detector (pico, tempo de imobilidade, ...). Opcional.
+  details    String?
+  occurredAt DateTime  @default(now())
   deviceId   String
-  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
+  device     Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
 }
